@@ -1,6 +1,7 @@
 import obspython as obs
 import os
 import datetime
+import time
 import subprocess
 import math
 
@@ -16,20 +17,19 @@ mkvmerge_path = None
 # Logging function
 def log_scene_change(scene_name, elapsed_time):
     global inscene
-    print("nominal time: "+ str(elapsed_time))
+    print("nominal time: "+ str(datetime.timedelta(seconds =elapsed_time)))
     if (inscene): #subtract transition if moving into the scene
-        timestamp = str(elapsed_time-datetime.timedelta(milliseconds=math.ceil(obs.obs_frontend_get_transition_duration()))).split('.')[0]  # Format hh:mm:ss
+        timestamp = elapsed_time-obs.obs_frontend_get_transition_duration()/1000
     else: #add transition if moving out of the scene
-        timestamp = str(elapsed_time+datetime.timedelta(milliseconds=math.ceil(obs.obs_frontend_get_transition_duration()))).split('.')[0]  # Format hh:mm:ss
-    print(timestamp)
+        timestamp = elapsed_time+obs.obs_frontend_get_transition_duration()/1000  
+    print("corrected time: "+ str(datetime.timedelta(seconds =timestamp)))
     with open(log_file_path, "a") as f:
-        f.write(f"{timestamp},")
+        f.write(f"{datetime.timedelta(seconds =timestamp)},")
 
 # Get recording elapsed time
 def get_recording_elapsed_time():
     if recording_active and recording_start_time:
-        thetime=datetime.datetime.now() - recording_start_time
-        return thetime
+        return time.monotonic() - recording_start_time        
     return None
 
 # Scene changed or recording started/stopped
@@ -45,7 +45,7 @@ def on_event(event):
             inscene = True
             
             
-        recording_start_time = datetime.datetime.now()
+        recording_start_time = time.monotonic()
 
     elif event == obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
         recording_active = False
@@ -58,7 +58,7 @@ def on_event(event):
             splitstring=splitstring[:splitstring.rindex(',')]
         
         
-        if mkvmerge_path is not None: 
+        if mkvmerge_path is not None and "," in splitstring: 
             print(splitstring)
             subprocess.run(str(mkvmerge_path)+" -o " +"\""+ output_name  +"-.mkv" +"\"" + " --split timestamps:" + splitstring +" \"" + recording_name +"\"")
 
@@ -85,7 +85,7 @@ def script_description():
 # OBS UI: Create properties
 def script_properties():
     props = obs.obs_properties_create()
-    scenegroup=obs.obs_properties_create()
+    
     filt= ""
     defaultpath = "."
     p = obs.obs_properties_add_path(props,"mkvmerge_path","Path to mkvmerge",obs.OBS_PATH_FILE,filt,defaultpath)
